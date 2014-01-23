@@ -7,6 +7,7 @@ use Feersum ();
 require Getopt::Long;
 
 my $native = 0;
+
 Getopt::Long::Configure("no_ignore_case", "no_auto_abbrev", "pass_through");
 Getopt::Long::GetOptions(
     "native!" => \$native,
@@ -16,21 +17,33 @@ my $runner;
 
 if ($native) {
     my $listen = 'localhost:5000';
-    my $pre_fork = 0;
-    my $verbose = 0;
+    
+    my ($pre_fork, $verbose, $daemon, $port, $host) = (0, 0, 0, 0, 0);
+    
+    my $log_file = '';
+
+    my $app_file = pop @ARGV || 'app.feersum';
     Getopt::Long::GetOptions(
-        "listen=s" => \$listen,
-        "pre-fork=i" => \$pre_fork,
-        "verbose!" => \$verbose,
+        "listen=s"      =>  \$listen,
+        "pre-fork=i"    =>  \$pre_fork,
+        "log_file=s"    =>  \$log_file,
+        "port=i"        =>  \$port,
+        "listen=s"      =>  \$listen,
+        "verbose"       =>  sub {$verbose++},
+        "daemonize"     =>  sub {$daemon++},
     );
     require Feersum::Runner;
-    my $app_file = pop @ARGV || 'app.feersum';
-    $runner = Feersum::Runner->new(
-        'listen' => [$listen],
-        app_file => $app_file,
-        pre_fork => $pre_fork,
-        quiet => !$verbose,
+    
+    my %run_pars = (
+        listen      =>  [$listen],
+        app_file    =>  $app_file,
+        pre_fork    =>  $pre_fork,
+        quiet       =>  $verbose ? 0 : 1,
+        daemonize   =>  $daemon,
+        log_file    =>  $log_file,
     );
+    $run_pars{port} = $port if $port;
+    $runner = Feersum::Runner->new(%run_pars);
 }
 else {
     my @args = (

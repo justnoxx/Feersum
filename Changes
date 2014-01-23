@@ -1,5 +1,11 @@
 Revision history for Perl extension Feersum
 
+1.402 Thu Jan 23 17:19:40 2014 +0200
+        Features:
+        - Added Starman-like --pid support
+        - Added --daemonize support
+        - Added --log_file support
+
 1.401 Wed Nov  6 21:53:25 2013 +0800
         Bugfixes
         - Fix tests for newer Plack::Test (@gfx++)

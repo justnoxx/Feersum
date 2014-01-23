@@ -9,10 +9,12 @@ use POSIX ();
 use Scalar::Util qw/weaken/;
 use Carp qw/carp croak/;
 
-use constant DEATH_TIMER => 5.0; # seconds
-use constant DEATH_TIMER_INCR => 2.0; # seconds
-use constant DEFAULT_HOST => 'localhost';
-use constant DEFAULT_PORT => 5000;
+use constant DEATH_TIMER            =>  5.0; # seconds
+use constant DEATH_TIMER_INCR       =>  2.0; # seconds
+use constant DEFAULT_HOST           =>  'localhost';
+use constant DEFAULT_PORT           =>  5000;
+use constant FEERSUM_MASTER_NAME    =>  'feersum master';
+use constant FEERSUM_WORKER_NAME    =>  'feersum worker';
 
 our $INSTANCE;
 sub new { ## no critic (RequireArgUnpacking)
@@ -79,8 +81,36 @@ sub assign_request_handler { ## no critic (RequireArgUnpacking)
 sub run {
     my $self = shift;
     weaken $self;
+    if ($self->{log_file}) {
+        open STDERR, '>>', $self->{log_file} or croak qq|Can't open STDERR to $self->{log_file}: $!|;
+    }
+
+    open STDOUT, '>>', '/dev/null';
+
+    if ($self->{daemonize}) {
+        chdir '/' or croak q|Can't chdir to /|;
+        defined(my $pid = fork)     or croak "Can't fork: $!";
+
+        exit if $pid;
+    }
+
+    if ($self->{pid}) {
+        if (-e $self->{pid}) {
+            open PID, $self->{pid};
+            my $pid = <PID>;
+            croak "Can't override pidfile($self->{pid}) of live process: $pid" if $pid =~ m/^\d*$/s && kill 0, $pid;
+            close PID;
+        }
+        open PID, '>', $self->{pid} or croak "Can't create pid file: $!";
+        print PID $$;
+        close PID;
+    }
+
+    # master process renaming
+    $0 = FEERSUM_MASTER_NAME;
 
     $self->{quiet} or warn "Feersum [$$]: starting...\n";
+    # if ($self->)
     $self->_prepare();
 
     my $app = shift || delete $self->{app};
@@ -101,6 +131,8 @@ sub run {
     $self->{_quit} = EV::signal 'QUIT', sub { $self->quit };
 
     $self->_start_pre_fork if $self->{pre_fork};
+
+    
     EV::run;
     $self->{quiet} or warn "Feersum [$$]: done\n";
     $self->DESTROY();
@@ -114,6 +146,8 @@ sub _fork_another {
     my $pid = fork;
     croak "failed to fork: $!" unless defined $pid;
     unless ($pid) {
+        # worker process renaming
+        $0 = FEERSUM_WORKER_NAME;
         EV::default_loop()->loop_fork;
         $self->{quiet} or warn "Feersum [$$]: starting\n";
         delete $self->{_kids};
@@ -170,6 +204,7 @@ sub quit {
     }
 
     $self->{_death} = EV::timer $death, 0, sub { POSIX::exit(1) };
+
     return;
 }
 
